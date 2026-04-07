@@ -2,6 +2,7 @@
   "name": "tuosan",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "宿松拖三 - 在线多人扑克牌游戏",
   "scripts": {
     "dev:server": "pnpm --filter @tuosan/server dev",
@@ -11,10 +12,30 @@
     "build:client": "pnpm --filter @tuosan/client build",
     "build": "pnpm build:shared && pnpm build:server && pnpm build:client",
     "lint": "pnpm -r lint",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "prepare": "husky"
   },
   "engines": {
     "node": ">=20.0.0",
     "pnpm": ">=9.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.2.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.4.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.8.1",
+    "typescript-eslint": "^8.58.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
   }
 }
