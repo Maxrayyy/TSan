@@ -1,0 +1,7 @@
+export default function Result() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-green-800 text-white">
+      <h2 className="text-3xl">游戏结算</h2>
+    </div>
+  );
+}
