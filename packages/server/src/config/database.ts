@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import { env } from './env.js';
 
-// Prisma 7 requires datasourceUrl via constructor
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const prisma = new PrismaClient({ datasourceUrl: env.DATABASE_URL } as any);
+const adapter = new PrismaPg(env.DATABASE_URL);
+export const prisma = new PrismaClient({ adapter });
