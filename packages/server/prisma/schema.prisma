@@ -4,16 +4,113 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
+// ============ 用户相关 ============
+
 model User {
-  id        String   @id @default(uuid())
-  nickname  String
-  email     String?  @unique
-  password  String?
-  avatar    String?
-  isGuest   Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String    @id @default(cuid())
+  nickname     String    @db.VarChar(20)
+  email        String?   @unique
+  passwordHash String?
+  avatar       String    @default("default_01")
+  isGuest      Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  lastLoginAt  DateTime?
+
+  stats       UserStats?
+  gameRecords GamePlayer[]
+  friendsA    Friendship[] @relation("friendA")
+  friendsB    Friendship[] @relation("friendB")
+
+  @@index([nickname])
+}
+
+model UserStats {
+  id                  String @id @default(cuid())
+  userId              String @unique
+  user                User   @relation(fields: [userId], references: [id])
+
+  totalGames          Int @default(0)
+  totalWins           Int @default(0)
+  totalFirstPlace     Int @default(0)
+  totalTuoSan         Int @default(0)
+  totalBieSan         Int @default(0)
+  totalScore          Int @default(0)
+  maxWinStreak        Int @default(0)
+  currentStreak       Int @default(0)
+  totalShuangDaiHua   Int @default(0)
+
+  @@index([totalWins])
+  @@index([totalScore])
+}
+
+// ============ 好友系统 ============
+
+model Friendship {
+  id        String           @id @default(cuid())
+  userAId   String
+  userBId   String
+  userA     User             @relation("friendA", fields: [userAId], references: [id])
+  userB     User             @relation("friendB", fields: [userBId], references: [id])
+  status    FriendshipStatus @default(PENDING)
+  createdAt DateTime         @default(now())
+
+  @@unique([userAId, userBId])
+  @@index([userBId])
+}
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  BLOCKED
+}
+
+// ============ 对局记录 ============
+
+model GameRecord {
+  id             String      @id @default(cuid())
+  roomId         String
+  gameVersion    GameVersion @default(ONE_DECK)
+  startedAt      DateTime
+  endedAt        DateTime
+  totalRounds    Int
+  teamAScore     Int
+  teamBScore     Int
+  isShuangDaiHua Boolean    @default(false)
+
+  players GamePlayer[]
+
+  @@index([startedAt])
+}
+
+enum GameVersion {
+  ONE_DECK
+  THREE_DECK
+}
+
+model GamePlayer {
+  id            String     @id @default(cuid())
+  gameRecordId  String
+  gameRecord    GameRecord @relation(fields: [gameRecordId], references: [id])
+  userId        String
+  user          User       @relation(fields: [userId], references: [id])
+
+  seatIndex     Int
+  teamIndex     Int
+  rank          Int
+
+  capturedScore Int
+  tuoSanCount   Int @default(0)
+  bieSanCount   Int @default(0)
+  tuoSanScore   Int @default(0)
+  bieSanScore   Int @default(0)
+  rankScore     Int @default(0)
+  totalScore    Int
+
+  @@index([userId])
+  @@index([gameRecordId])
+  @@unique([gameRecordId, seatIndex])
 }
