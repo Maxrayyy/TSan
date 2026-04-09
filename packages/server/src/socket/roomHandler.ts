@@ -158,6 +158,109 @@ export function registerRoomHandlers(io: TypedIO, socket: TypedSocket) {
     }
   });
 
+  socket.on('room:add-bot', async () => {
+    const roomId = socket.data.roomId as string;
+    if (!roomId) return;
+
+    try {
+      const { seatIndex, bot } = await roomService.addBot(roomId, userId);
+      io.to(roomId).emit('room:player-joined', { player: bot, seatIndex });
+
+      const updatedRoom = await roomService.getRoom(roomId);
+      if (updatedRoom) {
+        io.to(roomId).emit('room:state', updatedRoom);
+      }
+
+      logger.info({ userId, roomId, botSeat: seatIndex }, '添加机器人');
+    } catch (err: unknown) {
+      const e = err as { code?: string; message?: string };
+      socket.emit('error', {
+        code: e.code || 'INTERNAL_ERROR',
+        message: e.message || '添加机器人失败',
+      });
+    }
+  });
+
+  socket.on('room:kick', async (data: { seatIndex: number }) => {
+    const roomId = socket.data.roomId as string;
+    if (!roomId) return;
+
+    try {
+      const room = await roomService.getRoom(roomId);
+      if (!room) {
+        socket.emit('error', { code: 'ROOM_NOT_FOUND', message: '房间不存在' });
+        return;
+      }
+      if (room.hostUserId !== userId) {
+        socket.emit('error', { code: 'NOT_HOST', message: '只有房主可以踢人' });
+        return;
+      }
+
+      const target = room.players[data.seatIndex];
+      if (!target) {
+        socket.emit('error', { code: 'SEAT_EMPTY', message: '该座位没有玩家' });
+        return;
+      }
+
+      if (target.isBot) {
+        await roomService.removeBot(roomId, data.seatIndex);
+      } else {
+        await roomService.leaveRoom(roomId, target.userId);
+
+        const sockets = await io.in(roomId).fetchSockets();
+        for (const s of sockets) {
+          if (s.data.userId === target.userId) {
+            s.emit('room:kicked');
+            s.leave(roomId);
+            s.data.roomId = undefined;
+            s.data.seatIndex = undefined;
+            break;
+          }
+        }
+      }
+
+      io.to(roomId).emit('room:player-left', { playerId: target.userId });
+      const updatedRoom = await roomService.getRoom(roomId);
+      if (updatedRoom) {
+        io.to(roomId).emit('room:state', updatedRoom);
+      }
+
+      logger.info({ userId, roomId, kickedSeat: data.seatIndex }, '踢出玩家');
+    } catch (err: unknown) {
+      const e = err as { code?: string; message?: string };
+      socket.emit('error', {
+        code: e.code || 'INTERNAL_ERROR',
+        message: e.message || '踢人失败',
+      });
+    }
+  });
+
+  socket.on('room:dissolve', async () => {
+    const roomId = socket.data.roomId as string;
+    if (!roomId) return;
+
+    try {
+      await roomService.dissolveRoom(roomId, userId);
+
+      io.to(roomId).emit('room:dissolved');
+
+      const sockets = await io.in(roomId).fetchSockets();
+      for (const s of sockets) {
+        s.leave(roomId);
+        s.data.roomId = undefined;
+        s.data.seatIndex = undefined;
+      }
+
+      logger.info({ userId, roomId }, '解散房间');
+    } catch (err: unknown) {
+      const e = err as { code?: string; message?: string };
+      socket.emit('error', {
+        code: e.code || 'INTERNAL_ERROR',
+        message: e.message || '解散房间失败',
+      });
+    }
+  });
+
   socket.on('room:chat', (data: { message: string }) => {
     const roomId = socket.data.roomId as string;
     if (!roomId) return;
@@ -173,22 +276,35 @@ export function registerRoomHandlers(io: TypedIO, socket: TypedSocket) {
     });
   });
 
-  // Handle disconnect - auto leave room
   socket.on('disconnect', async () => {
     const roomId = socket.data.roomId as string;
     if (!roomId) return;
 
     try {
-      const { dissolved } = await roomService.leaveRoom(roomId, userId);
-      if (!dissolved) {
-        io.to(roomId).emit('room:player-left', { playerId: userId });
-        const updatedRoom = await roomService.getRoom(roomId);
-        if (updatedRoom) {
-          io.to(roomId).emit('room:state', updatedRoom);
+      const room = await roomService.getRoom(roomId);
+      if (!room) return;
+
+      if (room.hostUserId === userId) {
+        await roomService.dissolveRoom(roomId, userId);
+        io.to(roomId).emit('room:dissolved');
+        const sockets = await io.in(roomId).fetchSockets();
+        for (const s of sockets) {
+          s.leave(roomId);
+          s.data.roomId = undefined;
+          s.data.seatIndex = undefined;
+        }
+      } else {
+        const { dissolved } = await roomService.leaveRoom(roomId, userId);
+        if (!dissolved) {
+          io.to(roomId).emit('room:player-left', { playerId: userId });
+          const updatedRoom = await roomService.getRoom(roomId);
+          if (updatedRoom) {
+            io.to(roomId).emit('room:state', updatedRoom);
+          }
         }
       }
     } catch {
-      // Ignore errors during disconnect cleanup
+      // 忽略断开清理中的错误
     }
   });
 }
