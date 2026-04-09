@@ -2,7 +2,7 @@ import type { TypedIO, TypedSocket } from './index.js';
 import { getEngine, removeEngine, persistGameResult } from '../services/gameService.js';
 import * as roomService from '../services/roomService.js';
 import { logger } from '../utils/logger.js';
-import { TURN_TIMEOUT } from '@tuosan/shared';
+import { TURN_TIMEOUT, RECONNECT_TIMEOUT } from '@tuosan/shared';
 import type { Card } from '@tuosan/shared';
 import type { GameEngine } from '../game/game-engine.js';
 import { chooseBotPlay } from '../game/bot.js';
@@ -10,6 +10,9 @@ import { isBotUser } from '../services/roomService.js';
 
 // 房间计时器映射
 const turnTimers = new Map<string, NodeJS.Timeout>();
+
+// 断线重连计时器映射: roomId -> Map<seatIndex, timer>
+const reconnectTimers = new Map<string, Map<number, NodeJS.Timeout>>();
 
 export function registerGameHandlers(io: TypedIO, socket: TypedSocket): void {
   const userId = socket.data.userId as string;
@@ -66,6 +69,43 @@ export function registerGameHandlers(io: TypedIO, socket: TypedSocket): void {
         message: e.message || '出牌失败',
       });
     }
+  });
+
+  socket.on('game:reconnect-request', async () => {
+    const roomId = socket.data.roomId as string;
+    const seatIndex = socket.data.seatIndex as number;
+
+    if (!roomId || seatIndex === undefined) return;
+
+    const engine = getEngine(roomId);
+    if (!engine || engine.getState().phase !== 'playing') return;
+
+    // 清除重连计时器
+    const roomTimers = reconnectTimers.get(roomId);
+    if (roomTimers) {
+      const timer = roomTimers.get(seatIndex);
+      if (timer) {
+        clearTimeout(timer);
+        roomTimers.delete(seatIndex);
+      }
+    }
+
+    // 恢复连接状态
+    engine.setPlayerConnected(seatIndex, true);
+
+    // 发送完整游戏状态给重连玩家
+    const view = engine.getPlayerView(seatIndex);
+    socket.emit('game:reconnect', { gameState: view });
+
+    // 通知其他玩家
+    io.to(roomId).emit('game:player-reconnected', { seatIndex });
+
+    // 如果当前轮到重连玩家，重新通知
+    if (engine.getState().currentPlayerSeat === seatIndex) {
+      await notifyNextPlayer(io, roomId, seatIndex);
+    }
+
+    logger.info({ roomId, seatIndex }, '玩家重连成功');
   });
 
   socket.on('game:pass', async () => {
@@ -132,6 +172,84 @@ export function registerGameHandlers(io: TypedIO, socket: TypedSocket): void {
       });
     }
   });
+}
+
+/** 处理玩家断线 */
+export function handlePlayerDisconnect(io: TypedIO, roomId: string, seatIndex: number): void {
+  const engine = getEngine(roomId);
+  if (!engine) return;
+
+  engine.setPlayerConnected(seatIndex, false);
+  io.to(roomId).emit('game:player-disconnected', { seatIndex });
+
+  // 启动重连计时器
+  if (!reconnectTimers.has(roomId)) reconnectTimers.set(roomId, new Map());
+  const roomTimers = reconnectTimers.get(roomId)!;
+
+  // 清除已有计时器
+  const existing = roomTimers.get(seatIndex);
+  if (existing) clearTimeout(existing);
+
+  const timer = setTimeout(() => {
+    roomTimers.delete(seatIndex);
+    logger.info({ roomId, seatIndex }, '重连超时，玩家将被自动托管');
+    // 超时后如果轮到断线玩家，自动处理
+    const eng = getEngine(roomId);
+    if (eng && eng.getState().currentPlayerSeat === seatIndex) {
+      autoPlayForDisconnected(io, roomId, seatIndex);
+    }
+  }, RECONNECT_TIMEOUT * 1000);
+
+  roomTimers.set(seatIndex, timer);
+
+  // 如果当前轮到断线玩家，也需要自动处理
+  if (engine.getState().currentPlayerSeat === seatIndex) {
+    clearTurnTimer(roomId);
+    // 给一点时间看是否能快速重连，然后自动处理
+    startTurnTimer(io, roomId, seatIndex);
+  }
+
+  logger.info({ roomId, seatIndex }, '玩家断线');
+}
+
+/** 断线玩家自动出牌/pass */
+async function autoPlayForDisconnected(
+  io: TypedIO,
+  roomId: string,
+  seatIndex: number,
+): Promise<void> {
+  const engine = getEngine(roomId);
+  if (!engine) return;
+
+  const state = engine.getState();
+  if (state.currentPlayerSeat !== seatIndex || state.phase !== 'playing') return;
+
+  // 和超时逻辑相同：首出出最小牌，跟牌自动pass
+  if (state.currentRound.lastPlay === null) {
+    const player = state.players[seatIndex];
+    const nonThrees = player.hand.filter((card) => card.rank !== 3);
+    const cardToPlay =
+      nonThrees.length > 0 ? [...nonThrees].sort((a, b) => a.rank - b.rank)[0] : player.hand[0];
+
+    if (!cardToPlay) return;
+
+    const playResult = engine.play(seatIndex, [cardToPlay]);
+    if (!playResult.valid) return;
+
+    const newState = engine.getState();
+    io.to(roomId).emit('game:played', {
+      playerId: state.players[seatIndex].userId,
+      seatIndex,
+      cards: [cardToPlay],
+      handType: playResult.handType!,
+      remainingCards: newState.players[seatIndex].hand.length,
+      nextSeat: newState.currentPlayerSeat,
+    });
+
+    await handlePostPlay(io, roomId, engine, seatIndex);
+  } else {
+    await executeBotPass(io, roomId, engine, seatIndex);
+  }
 }
 
 /** 出牌后的公共处理：检查完成 → 检查游戏结束 → 通知下家 */
@@ -216,6 +334,20 @@ export async function notifyNextPlayer(
   if (isBotUser(player.userId)) {
     const delay = 200 + Math.random() * 300;
     setTimeout(() => botPlay(io, roomId, seatIndex), delay);
+    return;
+  }
+
+  // 如果玩家已断线，自动处理
+  if (!player.connected) {
+    const delay = 1000; // 给1秒看是否重连
+    setTimeout(() => {
+      const eng = getEngine(roomId);
+      if (!eng) return;
+      const s = eng.getState();
+      if (s.currentPlayerSeat === seatIndex && !s.players[seatIndex].connected) {
+        autoPlayForDisconnected(io, roomId, seatIndex);
+      }
+    }, delay);
     return;
   }
 

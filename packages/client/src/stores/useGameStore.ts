@@ -25,6 +25,8 @@ interface GameStore {
   setGameResult: (result: GameResult) => void;
   setMyTurn: (timeLimit: number) => void;
 
+  setPlayerConnected: (seatIndex: number, connected: boolean) => void;
+
   toggleCardSelection: (card: Card) => void;
   clearSelection: () => void;
   setSelection: (cards: Card[]) => void;
@@ -126,6 +128,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       turnTimer: timeLimit,
       timerInterval: interval,
     });
+  },
+
+  setPlayerConnected: (seatIndex, connected) => {
+    const { gameState } = get();
+    if (!gameState) return;
+    const newPlayers = { ...gameState.players };
+    newPlayers[seatIndex] = { ...newPlayers[seatIndex], connected };
+    set({ gameState: { ...gameState, players: newPlayers } });
   },
 
   toggleCardSelection: (card) => {

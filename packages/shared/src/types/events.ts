@@ -11,6 +11,7 @@ export interface ClientToServerEvents {
   'room:chat': (data: { message: string }) => void;
   'game:play': (data: { cards: Card[] }) => void;
   'game:pass': () => void;
+  'game:reconnect-request': () => void;
   'room:add-bot': () => void;
   'room:kick': (data: { seatIndex: number }) => void;
   'room:dissolve': () => void;
@@ -45,6 +46,8 @@ export interface ServerToClientEvents {
   'game:player-finished': (data: { playerId: string; seatIndex: number; rank: number }) => void;
   'game:end': (data: { result: GameResult }) => void;
   'game:reconnect': (data: { gameState: ClientGameState }) => void;
+  'game:player-disconnected': (data: { seatIndex: number }) => void;
+  'game:player-reconnected': (data: { seatIndex: number }) => void;
   'room:kicked': () => void;
   'room:dissolved': () => void;
   error: (data: { code: string; message: string }) => void;

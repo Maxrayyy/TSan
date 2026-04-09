@@ -131,6 +131,34 @@ describe('GameEngine', () => {
     });
   });
 
+  describe('disconnect/reconnect', () => {
+    it('tracks player connection status', () => {
+      engine.deal();
+      expect(engine.isPlayerConnected(1)).toBe(true);
+      engine.setPlayerConnected(1, false);
+      expect(engine.isPlayerConnected(1)).toBe(false);
+      engine.setPlayerConnected(1, true);
+      expect(engine.isPlayerConnected(1)).toBe(true);
+    });
+
+    it('getPlayerView includes connected status', () => {
+      engine.deal();
+      engine.setPlayerConnected(2, false);
+      const view = engine.getPlayerView(0);
+      expect(view.players[2].connected).toBe(false);
+      expect(view.players[0].connected).toBe(true);
+    });
+
+    it('getPlayerView works for reconnecting player', () => {
+      engine.deal();
+      engine.setPlayerConnected(0, false);
+      engine.setPlayerConnected(0, true);
+      const view = engine.getPlayerView(0);
+      expect(view.myHand).toHaveLength(13);
+      expect(view.players[0].connected).toBe(true);
+    });
+  });
+
   describe('full game simulation', () => {
     it('completes a game with simple strategy', () => {
       engine.deal();

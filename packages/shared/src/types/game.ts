@@ -49,6 +49,7 @@ export interface ClientPlayerState {
   score: number;
   rank: number | null;
   isTeammate: boolean;
+  connected: boolean;
 }
 
 export interface ClientGameState {

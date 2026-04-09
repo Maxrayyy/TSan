@@ -39,6 +39,18 @@ export function bindGameSocketListeners(socket: TypedSocket) {
   socket.on('game:end', (data) => {
     useGameStore.getState().setGameResult(data.result);
   });
+
+  socket.on('game:reconnect', (data) => {
+    useGameStore.getState().setGameState(data.gameState);
+  });
+
+  socket.on('game:player-disconnected', (data) => {
+    useGameStore.getState().setPlayerConnected(data.seatIndex, false);
+  });
+
+  socket.on('game:player-reconnected', (data) => {
+    useGameStore.getState().setPlayerConnected(data.seatIndex, true);
+  });
 }
 
 /** 解绑游戏 Socket 事件监听 */
@@ -50,4 +62,7 @@ export function unbindGameSocketListeners(socket: TypedSocket) {
   socket.off('game:round-end');
   socket.off('game:player-finished');
   socket.off('game:end');
+  socket.off('game:reconnect');
+  socket.off('game:player-disconnected');
+  socket.off('game:player-reconnected');
 }

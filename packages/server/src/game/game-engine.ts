@@ -177,6 +177,7 @@ export class GameEngine {
         score: p.score,
         rank: p.rank,
         isTeammate: getTeamIndex(p.seatIndex) === myTeam && p.seatIndex !== seatIndex,
+        connected: p.connected,
       };
     }
 
@@ -192,6 +193,14 @@ export class GameEngine {
       myTeamIndex: myTeam,
       turnTimer: 0,
     };
+  }
+
+  setPlayerConnected(seatIndex: number, connected: boolean): void {
+    this.state.players[seatIndex].connected = connected;
+  }
+
+  isPlayerConnected(seatIndex: number): boolean {
+    return this.state.players[seatIndex].connected;
   }
 
   settle(): GameResult {

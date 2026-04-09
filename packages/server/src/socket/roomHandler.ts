@@ -2,9 +2,9 @@ import type { TypedIO, TypedSocket } from './index.js';
 import * as roomService from '../services/roomService.js';
 import { prisma } from '../config/database.js';
 import { logger } from '../utils/logger.js';
-import { createGame } from '../services/gameService.js';
+import { createGame, getEngine } from '../services/gameService.js';
 import type { PlayerInfo } from '../game/game-engine.js';
-import { notifyNextPlayer } from './gameHandler.js';
+import { notifyNextPlayer, handlePlayerDisconnect } from './gameHandler.js';
 
 export function registerRoomHandlers(io: TypedIO, socket: TypedSocket) {
   const userId = socket.data.userId as string;
@@ -281,6 +281,17 @@ export function registerRoomHandlers(io: TypedIO, socket: TypedSocket) {
     if (!roomId) return;
 
     try {
+      // 如果游戏正在进行中，只标记断线，不离开房间
+      const engine = getEngine(roomId);
+      if (engine && engine.getState().phase === 'playing') {
+        const seatIndex = socket.data.seatIndex as number;
+        if (seatIndex !== undefined) {
+          handlePlayerDisconnect(io, roomId, seatIndex);
+        }
+        return;
+      }
+
+      // 非游戏中的断线处理
       const room = await roomService.getRoom(roomId);
       if (!room) return;
 

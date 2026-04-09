@@ -22,6 +22,23 @@ export default function Game() {
   const [hintIndex, setHintIndex] = useState(0);
   const [hints, setHints] = useState<Card[][]>([]);
 
+  // 断线自动重连
+  useEffect(() => {
+    try {
+      const socket = getSocket();
+      const handleReconnect = () => {
+        // Socket.IO 重连后，请求恢复游戏状态
+        socket.emit('game:reconnect-request');
+      };
+      socket.on('connect', handleReconnect);
+      return () => {
+        socket.off('connect', handleReconnect);
+      };
+    } catch {
+      // Socket 未初始化
+    }
+  }, []);
+
   useEffect(() => {
     if (!gameState) {
       if (roomId) navigate(`/room/${roomId}`);

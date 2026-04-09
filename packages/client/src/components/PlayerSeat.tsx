@@ -11,18 +11,29 @@ interface PlayerSeatProps {
 export default function PlayerSeat({ player, isCurrentTurn, position }: PlayerSeatProps) {
   // position 参数保留供将来使用，布局由父组件控制
   void position;
+  const isDisconnected = player.connected === false;
+
   return (
-    <div className={`flex flex-col items-center gap-1 ${isCurrentTurn ? 'scale-105' : ''}`}>
+    <div
+      className={`flex flex-col items-center gap-1 ${isCurrentTurn ? 'scale-105' : ''} ${isDisconnected ? 'opacity-50' : ''}`}
+    >
       <div
-        className={`flex h-12 w-12 items-center justify-center rounded-full text-lg font-bold ${
-          isCurrentTurn
-            ? 'animate-pulse ring-2 ring-yellow-400 bg-yellow-600'
-            : player.isTeammate
-              ? 'bg-blue-600'
-              : 'bg-gray-600'
+        className={`relative flex h-12 w-12 items-center justify-center rounded-full text-lg font-bold ${
+          isDisconnected
+            ? 'bg-red-800'
+            : isCurrentTurn
+              ? 'animate-pulse ring-2 ring-yellow-400 bg-yellow-600'
+              : player.isTeammate
+                ? 'bg-blue-600'
+                : 'bg-gray-600'
         }`}
       >
         {player.nickname[0]}
+        {isDisconnected && (
+          <span className="absolute -bottom-1 -right-1 rounded-full bg-red-500 px-1 text-[8px] text-white">
+            断线
+          </span>
+        )}
       </div>
       <span className="text-xs font-medium text-white">{player.nickname}</span>
       {player.rank === null ? (
