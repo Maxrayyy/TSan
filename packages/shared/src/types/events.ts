@@ -11,6 +11,9 @@ export interface ClientToServerEvents {
   'room:chat': (data: { message: string }) => void;
   'game:play': (data: { cards: Card[] }) => void;
   'game:pass': () => void;
+  'room:add-bot': () => void;
+  'room:kick': (data: { seatIndex: number }) => void;
+  'room:dissolve': () => void;
 }
 
 // 服务端 → 客户端
@@ -42,5 +45,7 @@ export interface ServerToClientEvents {
   'game:player-finished': (data: { playerId: string; seatIndex: number; rank: number }) => void;
   'game:end': (data: { result: GameResult }) => void;
   'game:reconnect': (data: { gameState: ClientGameState }) => void;
+  'room:kicked': () => void;
+  'room:dissolved': () => void;
   error: (data: { code: string; message: string }) => void;
 }

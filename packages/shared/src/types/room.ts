@@ -5,6 +5,7 @@ export interface RoomPlayer {
   seatIndex: number;
   isReady: boolean;
   isHost: boolean;
+  isBot: boolean;
 }
 
 export interface RoomState {
