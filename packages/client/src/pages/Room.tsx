@@ -8,8 +8,19 @@ export default function Room() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { room, chatMessages, error, joinRoom, leaveRoom, toggleReady, startGame, sendChat } =
-    useRoomStore();
+  const {
+    room,
+    chatMessages,
+    error,
+    joinRoom,
+    leaveRoom,
+    toggleReady,
+    startGame,
+    sendChat,
+    addBot,
+    kickPlayer,
+    dissolveRoom,
+  } = useRoomStore();
   const [chatInput, setChatInput] = useState('');
   const { gameState } = useGameStore();
 
@@ -65,12 +76,26 @@ export default function Room() {
         <div className="text-center">
           <span className="text-lg font-bold">房间 {roomId}</span>
         </div>
-        <button
-          onClick={handleCopyLink}
-          className="rounded bg-green-700 px-3 py-1 text-sm hover:bg-green-600"
-        >
-          复制邀请链接
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={handleCopyLink}
+            className="rounded bg-green-700 px-3 py-1 text-sm hover:bg-green-600"
+          >
+            复制邀请链接
+          </button>
+          {isHost && (
+            <button
+              onClick={() => {
+                if (confirm('确定要解散房间吗？所有玩家将被踢出。')) {
+                  dissolveRoom();
+                }
+              }}
+              className="rounded bg-red-700 px-3 py-1 text-sm hover:bg-red-600"
+            >
+              解散房间
+            </button>
+          )}
+        </div>
       </div>
 
       {error && <div className="bg-red-900/50 px-6 py-2 text-center text-red-300">{error}</div>}
@@ -112,9 +137,27 @@ export default function Room() {
                     <p className="mt-1 text-xs text-green-400">
                       {isTeamA ? 'A队' : 'B队'} - 座位{seatIdx + 1}
                     </p>
+                    {isHost && player.userId !== user.id && (
+                      <button
+                        onClick={() => kickPlayer(seatIdx)}
+                        className="mt-1 rounded bg-red-800 px-2 py-0.5 text-xs text-red-300 hover:bg-red-700"
+                      >
+                        踢出
+                      </button>
+                    )}
                   </>
                 ) : (
-                  <p className="text-green-500">空座位</p>
+                  <div className="flex flex-col items-center gap-2">
+                    <p className="text-green-500">空座位</p>
+                    {isHost && (
+                      <button
+                        onClick={addBot}
+                        className="rounded bg-green-700 px-3 py-1 text-xs hover:bg-green-600"
+                      >
+                        + 机器人
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             );
