@@ -62,6 +62,49 @@ router.get(
   },
 );
 
+router.get(
+  '/api/room/current',
+  authMiddleware,
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const roomId = await roomService.getUserRoom(req.user!.userId);
+      if (!roomId) {
+        res.json({ success: true, data: { room: null } });
+        return;
+      }
+      const room = await roomService.getRoom(roomId);
+      if (!room) {
+        // 房间已过期但映射还在，清理掉
+        await roomService.clearUserRoom(req.user!.userId);
+        res.json({ success: true, data: { room: null } });
+        return;
+      }
+      const playerCount = Object.values(room.players).filter(Boolean).length;
+      res.json({ success: true, data: { room: { ...room, playerCount } } });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+router.post(
+  '/api/room/leave-current',
+  authMiddleware,
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const roomId = await roomService.getUserRoom(req.user!.userId);
+      if (!roomId) {
+        res.json({ success: true, data: {} });
+        return;
+      }
+      await roomService.leaveRoom(roomId, req.user!.userId);
+      res.json({ success: true, data: {} });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 router.get('/api/room/:roomId', async (req, res, next) => {
   try {
     const room = await roomService.getRoom(req.params.roomId);

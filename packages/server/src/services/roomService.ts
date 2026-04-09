@@ -258,6 +258,10 @@ export async function getUserRoom(userId: string): Promise<string | null> {
   return redis.get(userRoomKey(userId));
 }
 
+export async function clearUserRoom(userId: string): Promise<void> {
+  await redis.del(userRoomKey(userId));
+}
+
 const BOT_NAMES = ['机器人A', '机器人B', '机器人C'];
 
 export function isBotUser(userId: string): boolean {

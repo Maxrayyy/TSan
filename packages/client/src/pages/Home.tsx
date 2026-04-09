@@ -14,12 +14,21 @@ export default function Home() {
   const [myRooms, setMyRooms] = useState<
     Array<{ roomId: string; playerCount: number; status: string; createdAt: number }>
   >([]);
+  const [currentRoom, setCurrentRoom] = useState<{
+    roomId: string;
+    playerCount: number;
+    status: string;
+  } | null>(null);
 
   useEffect(() => {
     if (user) {
       api
         .get<{ rooms: typeof myRooms }>('/api/room/my-rooms')
         .then((data) => setMyRooms(data.rooms))
+        .catch(() => {});
+      api
+        .get<{ room: typeof currentRoom }>('/api/room/current')
+        .then((data) => setCurrentRoom(data.room))
         .catch(() => {});
     }
   }, [user]);
@@ -70,6 +79,15 @@ export default function Home() {
     }
   };
 
+  const handleLeaveCurrentRoom = async () => {
+    try {
+      await api.post('/api/room/leave-current');
+      setCurrentRoom(null);
+    } catch (err: unknown) {
+      setError((err as { message?: string }).message || '离开房间失败');
+    }
+  };
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-green-900 text-white">
       <h1 className="mb-2 text-5xl font-bold">宿松拖三</h1>
@@ -81,6 +99,37 @@ export default function Home() {
             欢迎，<span className="font-semibold text-yellow-400">{user.nickname}</span>
             {user.isGuest && <span className="ml-2 text-sm text-green-400">(游客)</span>}
           </p>
+
+          {currentRoom && (
+            <div className="mb-2 w-80 rounded-lg bg-green-800 p-4">
+              <h3 className="mb-2 text-center text-sm text-green-300">当前所在房间</h3>
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="font-mono text-yellow-400">{currentRoom.roomId}</span>
+                  <span className="ml-2 text-sm text-green-400">{currentRoom.playerCount}/4</span>
+                  <span
+                    className={`ml-2 text-xs ${currentRoom.status === 'waiting' ? 'text-green-300' : 'text-orange-400'}`}
+                  >
+                    {currentRoom.status === 'waiting' ? '等待中' : '游戏中'}
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => navigate(`/room/${currentRoom.roomId}`)}
+                    className="rounded bg-yellow-500 px-3 py-1 text-sm font-semibold text-black hover:bg-yellow-400"
+                  >
+                    进入
+                  </button>
+                  <button
+                    onClick={handleLeaveCurrentRoom}
+                    className="rounded bg-red-600 px-3 py-1 text-sm font-semibold text-white hover:bg-red-500"
+                  >
+                    离开
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <button
             onClick={handleCreateRoom}
