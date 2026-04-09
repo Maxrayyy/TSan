@@ -21,6 +21,9 @@ interface RoomStore {
   toggleReady: () => void;
   startGame: () => void;
   sendChat: (message: string) => void;
+  addBot: () => void;
+  kickPlayer: (seatIndex: number) => void;
+  dissolveRoom: () => void;
   reset: () => void;
 }
 
@@ -72,6 +75,18 @@ export const useRoomStore = create<RoomStore>((set, get) => ({
         set({ error: data.message });
       });
 
+      socket.on('room:kicked', () => {
+        alert('你已被踢出房间');
+        get().leaveRoom();
+        window.location.href = '/';
+      });
+
+      socket.on('room:dissolved', () => {
+        alert('房间已被解散');
+        get().leaveRoom();
+        window.location.href = '/';
+      });
+
       // 绑定游戏 Socket 事件
       bindGameSocketListeners(socket);
 
@@ -102,6 +117,18 @@ export const useRoomStore = create<RoomStore>((set, get) => ({
 
   sendChat: (message: string) => {
     get().socket?.emit('room:chat', { message });
+  },
+
+  addBot: () => {
+    get().socket?.emit('room:add-bot');
+  },
+
+  kickPlayer: (seatIndex: number) => {
+    get().socket?.emit('room:kick', { seatIndex });
+  },
+
+  dissolveRoom: () => {
+    get().socket?.emit('room:dissolve');
   },
 
   reset: () => {
