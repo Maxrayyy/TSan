@@ -11,6 +11,18 @@ export default function Home() {
   const [roomId, setRoomId] = useState('');
   const [showJoinInput, setShowJoinInput] = useState(false);
   const [error, setError] = useState('');
+  const [myRooms, setMyRooms] = useState<
+    Array<{ roomId: string; playerCount: number; status: string; createdAt: number }>
+  >([]);
+
+  useEffect(() => {
+    if (user) {
+      api
+        .get<{ rooms: typeof myRooms }>('/api/room/my-rooms')
+        .then((data) => setMyRooms(data.rooms))
+        .catch(() => {});
+    }
+  }, [user]);
 
   useEffect(() => {
     loadUser();
@@ -48,6 +60,16 @@ export default function Home() {
     navigate(`/room/${roomId.trim().toUpperCase()}`);
   };
 
+  const handleBotGame = async () => {
+    setError('');
+    try {
+      const data = await api.post<{ roomId: string }>('/api/room/bot-game');
+      navigate(`/room/${data.roomId}`);
+    } catch (err: unknown) {
+      setError((err as { message?: string }).message || '创建人机对战失败');
+    }
+  };
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-green-900 text-white">
       <h1 className="mb-2 text-5xl font-bold">宿松拖三</h1>
@@ -65,6 +87,13 @@ export default function Home() {
             className="w-64 rounded-lg bg-yellow-500 px-8 py-3 text-lg font-semibold text-black hover:bg-yellow-400"
           >
             创建房间
+          </button>
+
+          <button
+            onClick={handleBotGame}
+            className="w-64 rounded-lg bg-green-600 px-8 py-3 text-lg font-semibold text-white hover:bg-green-500"
+          >
+            人机对战
           </button>
 
           {showJoinInput ? (
@@ -95,6 +124,38 @@ export default function Home() {
           )}
 
           {error && <p className="text-sm text-red-400">{error}</p>}
+
+          {myRooms.length > 0 && (
+            <div className="mt-4 w-80">
+              <h3 className="mb-2 text-center text-sm text-green-300">我的房间</h3>
+              <div className="flex flex-col gap-2">
+                {myRooms.map((r) => (
+                  <div
+                    key={r.roomId}
+                    className="flex items-center justify-between rounded-lg bg-green-800 px-4 py-2"
+                  >
+                    <div>
+                      <span className="font-mono text-yellow-400">{r.roomId}</span>
+                      <span className="ml-2 text-sm text-green-400">{r.playerCount}/4</span>
+                      <span
+                        className={`ml-2 text-xs ${r.status === 'waiting' ? 'text-green-300' : 'text-orange-400'}`}
+                      >
+                        {r.status === 'waiting' ? '等待中' : '游戏中'}
+                      </span>
+                    </div>
+                    {r.status === 'waiting' && (
+                      <button
+                        onClick={() => navigate(`/room/${r.roomId}`)}
+                        className="rounded bg-yellow-500 px-3 py-1 text-sm font-semibold text-black hover:bg-yellow-400"
+                      >
+                        进入
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <button onClick={logout} className="mt-4 text-sm text-green-400 hover:text-white">
             退出登录
