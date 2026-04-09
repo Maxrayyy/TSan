@@ -14,6 +14,12 @@ function userRoomKey(userId: string) {
   return `${USER_ROOM_PREFIX}${userId}`;
 }
 
+const USER_ROOMS_PREFIX = 'tuosan:user-rooms:';
+
+function userRoomsKey(userId: string) {
+  return `${USER_ROOMS_PREFIX}${userId}`;
+}
+
 async function generateRoomId(): Promise<string> {
   const counter = await redis.incr('tuosan:room-counter');
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -51,6 +57,7 @@ export async function createRoom(
     seatIndex: 0,
     isReady: false,
     isHost: true,
+    isBot: false,
   };
 
   const roomData: Record<string, string> = {
@@ -67,6 +74,8 @@ export async function createRoom(
   await redis.hset(roomKey(roomId), roomData);
   await redis.expire(roomKey(roomId), ROOM_TTL);
   await redis.set(userRoomKey(userId), roomId, 'EX', ROOM_TTL);
+  await redis.sadd(userRoomsKey(userId), roomId);
+  await redis.expire(userRoomsKey(userId), ROOM_TTL);
 
   return { roomId };
 }
@@ -147,10 +156,13 @@ export async function joinRoom(
     seatIndex,
     isReady: false,
     isHost: false,
+    isBot: false,
   };
 
   await redis.hset(roomKey(roomId), `seat_${seatIndex}`, JSON.stringify(player));
   await redis.set(userRoomKey(userId), roomId, 'EX', ROOM_TTL);
+  await redis.sadd(userRoomsKey(userId), roomId);
+  await redis.expire(userRoomsKey(userId), ROOM_TTL);
 
   room.players[seatIndex] = player;
   return { seatIndex, room };
@@ -181,6 +193,7 @@ export async function leaveRoom(
 
   await redis.hset(roomKey(roomId), `seat_${seatIndex}`, '');
   await redis.del(userRoomKey(userId));
+  await redis.srem(userRoomsKey(userId), roomId);
 
   // Check if room is empty
   const remaining = Object.values(room.players).filter((p, i) => p && i !== seatIndex);
@@ -189,14 +202,18 @@ export async function leaveRoom(
     return { seatIndex, dissolved: true };
   }
 
-  // If host left, transfer to next player
+  // 房主离开，解散房间
   if (room.hostUserId === userId) {
-    const newHost = remaining[0]!;
-    await redis.hset(roomKey(roomId), 'hostUserId', newHost.userId);
-    // Update the host player's isHost field
-    newHost.isHost = true;
-    const newHostSeat = newHost.seatIndex;
-    await redis.hset(roomKey(roomId), `seat_${newHostSeat}`, JSON.stringify(newHost));
+    // 清理所有其他真实玩家
+    for (let i = 0; i < 4; i++) {
+      const p = room.players[i];
+      if (p && p.userId !== userId && !p.isBot) {
+        await redis.del(userRoomKey(p.userId));
+        await redis.srem(userRoomsKey(p.userId), roomId);
+      }
+    }
+    await redis.del(roomKey(roomId));
+    return { seatIndex, dissolved: true };
   }
 
   return { seatIndex, dissolved: false };
@@ -239,4 +256,91 @@ export async function setRoomStatus(roomId: string, status: 'waiting' | 'playing
 
 export async function getUserRoom(userId: string): Promise<string | null> {
   return redis.get(userRoomKey(userId));
+}
+
+const BOT_NAMES = ['机器人A', '机器人B', '机器人C'];
+
+export function isBotUser(userId: string): boolean {
+  return userId.startsWith('bot_');
+}
+
+export async function addBot(
+  roomId: string,
+  requestUserId: string,
+): Promise<{ seatIndex: number; bot: RoomPlayer }> {
+  const room = await getRoom(roomId);
+  if (!room) throw new AppError(404, '房间不存在', 'ROOM_NOT_FOUND');
+  if (room.hostUserId !== requestUserId)
+    throw new AppError(403, '只有房主可以添加机器人', 'NOT_HOST');
+  if (room.status !== 'waiting') throw new AppError(409, '游戏已开始', 'GAME_IN_PROGRESS');
+
+  let seatIndex = -1;
+  for (let i = 0; i < 4; i++) {
+    if (!room.players[i]) {
+      seatIndex = i;
+      break;
+    }
+  }
+  if (seatIndex === -1) throw new AppError(409, '房间已满', 'ROOM_FULL');
+
+  const existingBots = Object.values(room.players).filter((p) => p?.isBot).length;
+  const botId = `bot_${seatIndex}`;
+  const botName = BOT_NAMES[existingBots] || `机器人${existingBots + 1}`;
+
+  const bot: RoomPlayer = {
+    userId: botId,
+    nickname: botName,
+    avatar: '',
+    seatIndex,
+    isReady: true,
+    isHost: false,
+    isBot: true,
+  };
+
+  await redis.hset(roomKey(roomId), `seat_${seatIndex}`, JSON.stringify(bot));
+  return { seatIndex, bot };
+}
+
+export async function removeBot(roomId: string, seatIndex: number): Promise<void> {
+  await redis.hset(roomKey(roomId), `seat_${seatIndex}`, '');
+}
+
+export async function dissolveRoom(roomId: string, requestUserId: string): Promise<void> {
+  const room = await getRoom(roomId);
+  if (!room) throw new AppError(404, '房间不存在', 'ROOM_NOT_FOUND');
+  if (room.hostUserId !== requestUserId)
+    throw new AppError(403, '只有房主可以解散房间', 'NOT_HOST');
+
+  for (let i = 0; i < 4; i++) {
+    const player = room.players[i];
+    if (player && !player.isBot) {
+      await redis.del(userRoomKey(player.userId));
+      await redis.srem(userRoomsKey(player.userId), roomId);
+    }
+  }
+  await redis.del(roomKey(roomId));
+}
+
+export async function getUserRooms(
+  userId: string,
+): Promise<Array<{ roomId: string; playerCount: number; status: string; createdAt: number }>> {
+  const roomIds = await redis.smembers(userRoomsKey(userId));
+  const rooms: Array<{ roomId: string; playerCount: number; status: string; createdAt: number }> =
+    [];
+
+  for (const rid of roomIds) {
+    const room = await getRoom(rid);
+    if (!room) {
+      await redis.srem(userRoomsKey(userId), rid);
+      continue;
+    }
+    const playerCount = Object.values(room.players).filter(Boolean).length;
+    rooms.push({
+      roomId: room.roomId,
+      playerCount,
+      status: room.status,
+      createdAt: room.createdAt,
+    });
+  }
+  return rooms;
 }
