@@ -11,6 +11,7 @@ import CardPile from '../components/CardPile.js';
 import ScoreBoard from '../components/ScoreBoard.js';
 import Timer from '../components/Timer.js';
 import ActionBar from '../components/ActionBar.js';
+import { getHints } from '../game/hints.js';
 
 export default function Game() {
   const { roomId } = useParams<{ roomId: string }>();
@@ -18,10 +19,8 @@ export default function Game() {
   const { gameState, selectedCards, gameResult, turnTimer, toggleCardSelection, clearSelection } =
     useGameStore();
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [_hintIndex, setHintIndex] = useState(0);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [_hints, setHints] = useState<Card[][]>([]);
+  const [hintIndex, setHintIndex] = useState(0);
+  const [hints, setHints] = useState<Card[][]>([]);
 
   useEffect(() => {
     if (!gameState) {
@@ -80,8 +79,21 @@ export default function Game() {
   };
 
   const handleHint = () => {
-    // 提示功能将在 Task 10 中实现
-    // 目前为空操作
+    if (hints.length > 0) {
+      // 循环切换提示
+      const nextIndex = (hintIndex + 1) % hints.length;
+      setHintIndex(nextIndex);
+      useGameStore.getState().setSelection(hints[nextIndex]);
+      return;
+    }
+
+    const isLeading = lastPlay === null;
+    const newHints = getHints(myHand, lastPlay, isLeading);
+    setHints(newHints);
+    if (newHints.length > 0) {
+      setHintIndex(0);
+      useGameStore.getState().setSelection(newHints[0]);
+    }
   };
 
   const canPass = isMyTurn && lastPlay !== null;
