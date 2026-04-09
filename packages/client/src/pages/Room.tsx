@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useRoomStore } from '../stores/useRoomStore.js';
 import { useAuthStore } from '../stores/useAuthStore.js';
+import { useGameStore } from '../stores/useGameStore.js';
 
 export default function Room() {
   const { roomId } = useParams<{ roomId: string }>();
@@ -10,6 +11,7 @@ export default function Room() {
   const { room, chatMessages, error, joinRoom, leaveRoom, toggleReady, startGame, sendChat } =
     useRoomStore();
   const [chatInput, setChatInput] = useState('');
+  const { gameState } = useGameStore();
 
   useEffect(() => {
     if (!user) {
@@ -23,6 +25,12 @@ export default function Room() {
       leaveRoom();
     };
   }, [roomId, user]);
+
+  useEffect(() => {
+    if (gameState && roomId) {
+      navigate(`/game/${roomId}`);
+    }
+  }, [gameState, roomId, navigate]);
 
   if (!user) return null;
 
