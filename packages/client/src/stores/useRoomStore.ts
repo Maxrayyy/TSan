@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { RoomState, RoomPlayer } from '@tuosan/shared';
 import { getSocket, type TypedSocket } from '../services/socket.js';
+import { bindGameSocketListeners, unbindGameSocketListeners } from '../services/gameSocket.js';
 
 interface ChatMessage {
   playerId: string;
@@ -71,6 +72,9 @@ export const useRoomStore = create<RoomStore>((set, get) => ({
         set({ error: data.message });
       });
 
+      // 绑定游戏 Socket 事件
+      bindGameSocketListeners(socket);
+
       // Emit join
       socket.emit('room:join', { roomId, seatIndex });
     } catch {
@@ -81,6 +85,7 @@ export const useRoomStore = create<RoomStore>((set, get) => ({
   leaveRoom: () => {
     const { socket } = get();
     if (socket) {
+      unbindGameSocketListeners(socket);
       socket.emit('room:leave');
       socket.removeAllListeners();
     }
@@ -101,6 +106,7 @@ export const useRoomStore = create<RoomStore>((set, get) => ({
 
   reset: () => {
     const { socket } = get();
+    if (socket) unbindGameSocketListeners(socket);
     if (socket) socket.removeAllListeners();
     set({ room: null, socket: null, chatMessages: [], error: null });
   },
