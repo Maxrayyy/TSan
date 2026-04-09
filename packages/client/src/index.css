@@ -1,1 +1,79 @@
 @import 'tailwindcss';
+
+/* 出牌动画 */
+@keyframes card-play {
+  from {
+    transform: translateY(30px) scale(0.8);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+/* 滑入动画 */
+@keyframes slide-up {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* 拖三/炸弹特效 */
+@keyframes special-flash {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.15);
+    filter: brightness(1.5);
+  }
+}
+
+/* 聊天气泡 */
+@keyframes bubble-in {
+  from {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes bubble-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.animate-card-play {
+  animation: card-play 0.3s ease-out;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out;
+}
+
+.animate-special-flash {
+  animation: special-flash 0.6s ease-in-out 3;
+}
+
+.animate-bubble-in {
+  animation: bubble-in 0.2s ease-out;
+}
+
+.animate-bubble-out {
+  animation: bubble-out 0.3s ease-in forwards;
+}

@@ -1,6 +1,6 @@
 // packages/client/src/components/CardPile.tsx
 import type { Card as CardType, HandType } from '@tuosan/shared';
-import { HAND_TYPE_DISPLAY } from '@tuosan/shared';
+import { HAND_TYPE_DISPLAY, HandTypeEnum } from '@tuosan/shared';
 import Card from './Card.js';
 
 interface CardPileProps {
@@ -8,6 +8,14 @@ interface CardPileProps {
   handType: HandType | null;
   playerName?: string;
 }
+
+const SPECIAL_TYPES = new Set([
+  HandTypeEnum.BOMB,
+  HandTypeEnum.PURE_FTK,
+  HandTypeEnum.PURE_DRAGON,
+  HandTypeEnum.TIAN_LONG,
+  HandTypeEnum.PURE_TIAN_LONG,
+]);
 
 export default function CardPile({ cards, handType, playerName }: CardPileProps) {
   if (!cards || cards.length === 0) {
@@ -18,8 +26,12 @@ export default function CardPile({ cards, handType, playerName }: CardPileProps)
     );
   }
 
+  const isSpecial = handType && SPECIAL_TYPES.has(handType.type);
+
   return (
-    <div className="flex flex-col items-center gap-1">
+    <div
+      className={`flex flex-col items-center gap-1 animate-card-play ${isSpecial ? 'animate-special-flash' : ''}`}
+    >
       {playerName && <span className="text-xs text-green-300">{playerName}</span>}
       <div className="flex gap-0.5">
         {cards.map((card) => (
@@ -27,7 +39,10 @@ export default function CardPile({ cards, handType, playerName }: CardPileProps)
         ))}
       </div>
       {handType && (
-        <span className="text-xs text-yellow-400">{HAND_TYPE_DISPLAY[handType.type]}</span>
+        <span className={`text-xs ${isSpecial ? 'font-bold text-red-400' : 'text-yellow-400'}`}>
+          {HAND_TYPE_DISPLAY[handType.type]}
+          {isSpecial && ' !'}
+        </span>
       )}
     </div>
   );

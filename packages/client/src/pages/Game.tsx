@@ -12,6 +12,7 @@ import ScoreBoard from '../components/ScoreBoard.js';
 import Timer from '../components/Timer.js';
 import ActionBar from '../components/ActionBar.js';
 import { getHints } from '../game/hints.js';
+import { useSound } from '../hooks/useSound.js';
 
 export default function Game() {
   const { roomId } = useParams<{ roomId: string }>();
@@ -21,6 +22,8 @@ export default function Game() {
 
   const [hintIndex, setHintIndex] = useState(0);
   const [hints, setHints] = useState<Card[][]>([]);
+  const { playCard, playPass, playBomb, playTick, playButton } = useSound();
+  const lastEventRef = useGameStore((s) => s.lastEvent);
 
   // 断线自动重连
   useEffect(() => {
@@ -52,6 +55,29 @@ export default function Game() {
     }
   }, [gameResult, roomId, navigate]);
 
+  // 音效触发
+  useEffect(() => {
+    if (!lastEventRef) return;
+    if (lastEventRef.includes('played')) {
+      // 检查是否是炸弹等特殊牌型
+      const ht = gameState?.lastPlay?.handType;
+      if (ht && ['bomb', 'pure_tian_long', 'tian_long'].includes(ht.type)) {
+        playBomb();
+      } else {
+        playCard();
+      }
+    } else if (lastEventRef.includes('passed')) {
+      playPass();
+    }
+  }, [lastEventRef, playCard, playPass, playBomb, gameState?.lastPlay?.handType]);
+
+  // 倒计时警告音
+  useEffect(() => {
+    if (turnTimer > 0 && turnTimer <= 5 && gameState?.isMyTurn) {
+      playTick();
+    }
+  }, [turnTimer, gameState?.isMyTurn, playTick]);
+
   // 重置提示
   useEffect(() => {
     setHints([]);
@@ -78,6 +104,7 @@ export default function Game() {
 
   const handlePlay = () => {
     if (selectedCards.length === 0) return;
+    playButton();
     try {
       const socket = getSocket();
       socket.emit('game:play', { cards: selectedCards });
@@ -87,6 +114,7 @@ export default function Game() {
   };
 
   const handlePass = () => {
+    playButton();
     try {
       const socket = getSocket();
       socket.emit('game:pass');
