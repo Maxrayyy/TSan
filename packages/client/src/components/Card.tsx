@@ -12,9 +12,9 @@ interface CardProps {
 
 export default function Card({ card, selected, onClick, size = 'md', faceDown }: CardProps) {
   const sizeClasses = {
-    sm: 'w-8 h-12 text-xs',
-    md: 'w-12 h-18 text-sm',
-    lg: 'w-16 h-24 text-base',
+    sm: 'w-7 h-10 text-[10px] sm:w-8 sm:h-12 sm:text-xs',
+    md: 'w-9 h-14 text-xs sm:w-11 sm:h-16 sm:text-sm md:w-12 md:h-18 md:text-sm',
+    lg: 'w-12 h-18 text-sm sm:w-14 sm:h-21 md:w-16 md:h-24 md:text-base',
   };
 
   if (faceDown) {

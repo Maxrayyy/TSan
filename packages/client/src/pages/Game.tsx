@@ -147,16 +147,16 @@ export default function Game() {
   return (
     <div className="flex h-screen flex-col bg-green-900">
       {/* 顶部栏：分数 + 计时器 */}
-      <div className="flex items-center justify-between px-4 py-2">
+      <div className="flex items-center justify-between px-2 py-1 sm:px-4 sm:py-2">
         <ScoreBoard teamScores={teamScores} myTeamIndex={myTeamIndex} />
         {isMyTurn && <Timer seconds={turnTimer} total={TURN_TIMEOUT} />}
-        <div className="text-xs text-green-600">房间 {roomId}</div>
+        <div className="hidden sm:block text-xs text-green-600">房间 {roomId}</div>
       </div>
 
       {/* 牌桌 */}
       <div className="relative flex flex-1 items-center justify-center">
         {/* 对面玩家 */}
-        <div className="absolute top-4">
+        <div className="absolute top-1 sm:top-4">
           <PlayerSeat
             player={players[topSeat]}
             isCurrentTurn={currentPlayerSeat === topSeat}
@@ -165,7 +165,7 @@ export default function Game() {
         </div>
 
         {/* 左边玩家 */}
-        <div className="absolute left-4">
+        <div className="absolute left-1 sm:left-4">
           <PlayerSeat
             player={players[leftSeat]}
             isCurrentTurn={currentPlayerSeat === leftSeat}
@@ -174,7 +174,7 @@ export default function Game() {
         </div>
 
         {/* 右边玩家 */}
-        <div className="absolute right-4">
+        <div className="absolute right-1 sm:right-4">
           <PlayerSeat
             player={players[rightSeat]}
             isCurrentTurn={currentPlayerSeat === rightSeat}
@@ -191,15 +191,15 @@ export default function Game() {
       </div>
 
       {/* 底部：我的手牌 + 操作按钮 */}
-      <div className="border-t border-green-700 bg-green-800 px-4 pb-4 pt-2">
+      <div className="border-t border-green-700 bg-green-800 px-2 pb-2 pt-1 sm:px-4 sm:pb-4 sm:pt-2">
         {/* 我的信息 + 操作按钮 */}
-        <div className="mb-2 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-yellow-600 text-sm font-bold">
+        <div className="mb-1 sm:mb-2 flex items-center justify-between">
+          <div className="flex items-center gap-1 sm:gap-2">
+            <div className="flex h-6 w-6 sm:h-8 sm:w-8 items-center justify-center rounded-full bg-yellow-600 text-xs sm:text-sm font-bold">
               {players[mySeat]?.nickname?.[0]}
             </div>
-            <span className="text-sm text-white">{players[mySeat]?.nickname}</span>
-            <span className="text-xs text-green-400">{myHand.length} 张</span>
+            <span className="hidden sm:inline text-sm text-white">{players[mySeat]?.nickname}</span>
+            <span className="text-[10px] sm:text-xs text-green-400">{myHand.length} 张</span>
           </div>
           <ActionBar
             isMyTurn={isMyTurn}

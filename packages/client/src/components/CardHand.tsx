@@ -13,12 +13,16 @@ export default function CardHand({ cards, selectedCards, onToggleCard, disabled 
   const isSelected = (card: CardType) =>
     selectedCards.some((c) => c.suit === card.suit && c.rank === card.rank);
 
+  // 根据手牌数量动态调整重叠度
+  const overlapPx = cards.length > 10 ? -8 : cards.length > 7 ? -10 : -12;
+
   return (
-    <div className="flex justify-center gap-0.5">
+    <div className="flex justify-center gap-0.5 overflow-x-auto px-2">
       {cards.map((card, i) => (
         <div
           key={`${card.suit}-${card.rank}`}
-          style={{ marginLeft: i === 0 ? 0 : '-12px', zIndex: i }}
+          className="shrink-0"
+          style={{ marginLeft: i === 0 ? 0 : `${overlapPx}px`, zIndex: i }}
         >
           <Card
             card={card}

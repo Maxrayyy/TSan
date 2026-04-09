@@ -18,7 +18,7 @@ export default function PlayerSeat({ player, isCurrentTurn, position }: PlayerSe
       className={`flex flex-col items-center gap-1 ${isCurrentTurn ? 'scale-105' : ''} ${isDisconnected ? 'opacity-50' : ''}`}
     >
       <div
-        className={`relative flex h-12 w-12 items-center justify-center rounded-full text-lg font-bold ${
+        className={`relative flex h-9 w-9 sm:h-12 sm:w-12 items-center justify-center rounded-full text-sm sm:text-lg font-bold ${
           isDisconnected
             ? 'bg-red-800'
             : isCurrentTurn
@@ -35,13 +35,17 @@ export default function PlayerSeat({ player, isCurrentTurn, position }: PlayerSe
           </span>
         )}
       </div>
-      <span className="text-xs font-medium text-white">{player.nickname}</span>
+      <span className="text-[10px] sm:text-xs font-medium text-white truncate max-w-16 sm:max-w-none">
+        {player.nickname}
+      </span>
       {player.rank === null ? (
-        <span className="text-xs text-green-300">{player.cardCount} 张</span>
+        <span className="text-[10px] sm:text-xs text-green-300">{player.cardCount} 张</span>
       ) : (
-        <span className="text-xs font-bold text-yellow-400">{RANK_LABELS[player.rank]}</span>
+        <span className="text-[10px] sm:text-xs font-bold text-yellow-400">
+          {RANK_LABELS[player.rank]}
+        </span>
       )}
-      <span className="text-xs text-gray-400">得分: {player.score}</span>
+      <span className="hidden sm:inline text-xs text-gray-400">得分: {player.score}</span>
       {player.isTeammate && (
         <span className="rounded bg-blue-800 px-1 text-[10px] text-blue-300">队友</span>
       )}

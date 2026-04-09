@@ -22,36 +22,38 @@ export default function ActionBar({
 }: ActionBarProps) {
   if (!isMyTurn) {
     return (
-      <div className="flex items-center justify-center py-3 text-green-400">等待其他玩家...</div>
+      <div className="flex items-center justify-center py-2 sm:py-3 text-sm sm:text-base text-green-400">
+        等待其他玩家...
+      </div>
     );
   }
 
   return (
-    <div className="flex items-center justify-center gap-3 py-3">
+    <div className="flex items-center justify-center gap-1.5 sm:gap-3 py-2 sm:py-3">
       {canPass && (
         <button
           onClick={onPass}
-          className="rounded-lg bg-gray-600 px-6 py-2 font-semibold text-white hover:bg-gray-500"
+          className="rounded-lg bg-gray-600 px-3 py-1.5 sm:px-6 sm:py-2 text-sm sm:text-base font-semibold text-white active:bg-gray-500 hover:bg-gray-500"
         >
           不要
         </button>
       )}
       <button
         onClick={onHint}
-        className="rounded-lg bg-blue-600 px-6 py-2 font-semibold text-white hover:bg-blue-500"
+        className="rounded-lg bg-blue-600 px-3 py-1.5 sm:px-6 sm:py-2 text-sm sm:text-base font-semibold text-white active:bg-blue-500 hover:bg-blue-500"
       >
         提示
       </button>
       <button
         onClick={onClear}
-        className="rounded-lg bg-gray-600 px-4 py-2 text-sm text-white hover:bg-gray-500"
+        className="hidden sm:inline-block rounded-lg bg-gray-600 px-4 py-2 text-sm text-white hover:bg-gray-500"
       >
         清空
       </button>
       <button
         onClick={onPlay}
         disabled={selectedCards.length === 0}
-        className="rounded-lg bg-yellow-500 px-8 py-2 font-bold text-black hover:bg-yellow-400 disabled:opacity-40"
+        className="rounded-lg bg-yellow-500 px-4 py-1.5 sm:px-8 sm:py-2 text-sm sm:text-base font-bold text-black active:bg-yellow-400 hover:bg-yellow-400 disabled:opacity-40"
       >
         出牌
       </button>
