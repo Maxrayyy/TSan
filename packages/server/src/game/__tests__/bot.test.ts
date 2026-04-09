@@ -3,7 +3,7 @@ import { chooseBotPlay } from '../bot.js';
 import type { Card, HandType } from '@tuosan/shared';
 import { HandTypeEnum } from '@tuosan/shared';
 
-const card = (rank: number, suit = 'spade' as const): Card => ({
+const card = (rank: number, suit: Card['suit'] = 'spade'): Card => ({
   rank: rank as Card['rank'],
   suit,
 });
