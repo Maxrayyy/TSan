@@ -5,6 +5,8 @@ import { logger } from '../utils/logger.js';
 import { TURN_TIMEOUT } from '@tuosan/shared';
 import type { Card } from '@tuosan/shared';
 import type { GameEngine } from '../game/game-engine.js';
+import { chooseBotPlay } from '../game/bot.js';
+import { isBotUser } from '../services/roomService.js';
 
 // 房间计时器映射
 const turnTimers = new Map<string, NodeJS.Timeout>();
@@ -198,12 +200,26 @@ async function handleRoundEndCheck(
   }
 }
 
-/** 通知下一个玩家出牌，启动计时器 */
+/** 通知下一个玩家出牌，启动计时器。如果是机器人则自动出牌 */
 export async function notifyNextPlayer(
   io: TypedIO,
   roomId: string,
   seatIndex: number,
 ): Promise<void> {
+  const engine = getEngine(roomId);
+  if (!engine) return;
+
+  const state = engine.getState();
+  const player = state.players[seatIndex];
+
+  // 如果是机器人，自动出牌
+  if (isBotUser(player.userId)) {
+    const delay = 200 + Math.random() * 300;
+    setTimeout(() => botPlay(io, roomId, seatIndex), delay);
+    return;
+  }
+
+  // 真实玩家：发 Socket 事件 + 启动计时器
   const sockets = await io.in(roomId).fetchSockets();
   for (const s of sockets) {
     if (s.data.seatIndex === seatIndex) {
@@ -212,6 +228,83 @@ export async function notifyNextPlayer(
     }
   }
   startTurnTimer(io, roomId, seatIndex);
+}
+
+/** 机器人自动出牌 */
+async function botPlay(io: TypedIO, roomId: string, seatIndex: number): Promise<void> {
+  const engine = getEngine(roomId);
+  if (!engine) return;
+
+  const state = engine.getState();
+  if (state.phase !== 'playing' || state.currentPlayerSeat !== seatIndex) return;
+
+  const player = state.players[seatIndex];
+  const lastPlay = state.currentRound.lastPlay;
+  const decision = chooseBotPlay(
+    player.hand,
+    lastPlay ? { cards: lastPlay.cards, handType: lastPlay.handType } : null,
+  );
+
+  try {
+    if (decision.action === 'play' && decision.cards) {
+      const cardToPlay = decision.cards[0];
+      const result = engine.play(seatIndex, [cardToPlay]);
+      if (!result.valid) {
+        if (lastPlay) {
+          await executeBotPass(io, roomId, engine, seatIndex);
+        }
+        return;
+      }
+
+      const newState = engine.getState();
+      const updatedPlayer = newState.players[seatIndex];
+
+      io.to(roomId).emit('game:played', {
+        playerId: updatedPlayer.userId,
+        seatIndex,
+        cards: [cardToPlay],
+        handType: result.handType!,
+        remainingCards: updatedPlayer.hand.length,
+        nextSeat: newState.currentPlayerSeat,
+      });
+
+      await handlePostPlay(io, roomId, engine, seatIndex);
+    } else {
+      await executeBotPass(io, roomId, engine, seatIndex);
+    }
+  } catch (err) {
+    logger.error({ err, roomId, seatIndex }, '机器人出牌失败');
+  }
+}
+
+/** 机器人执行 pass */
+async function executeBotPass(
+  io: TypedIO,
+  roomId: string,
+  engine: GameEngine,
+  seatIndex: number,
+): Promise<void> {
+  const state = engine.getState();
+  const prevLastPlay = state.currentRound.lastPlay
+    ? { ...state.currentRound.lastPlay, cards: [...state.currentRound.lastPlay.cards] }
+    : null;
+  const prevScores = Object.fromEntries(
+    Object.entries(state.players).map(([s, p]) => [s, p.score]),
+  );
+
+  const passResult = engine.pass(seatIndex);
+  if (!passResult.valid) return;
+
+  const newState = engine.getState();
+
+  io.to(roomId).emit('game:passed', {
+    playerId: state.players[seatIndex].userId,
+    seatIndex,
+    nextSeat: newState.currentPlayerSeat,
+  });
+
+  await handleRoundEndCheck(io, roomId, newState, prevLastPlay, prevScores);
+  await notifyNextPlayer(io, roomId, newState.currentPlayerSeat);
 }
 
 /** 启动出牌倒计时 */
