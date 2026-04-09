@@ -2,6 +2,9 @@ import type { TypedIO, TypedSocket } from './index.js';
 import * as roomService from '../services/roomService.js';
 import { prisma } from '../config/database.js';
 import { logger } from '../utils/logger.js';
+import { createGame } from '../services/gameService.js';
+import type { PlayerInfo } from '../game/game-engine.js';
+import { notifyNextPlayer } from './gameHandler.js';
 
 export function registerRoomHandlers(io: TypedIO, socket: TypedSocket) {
   const userId = socket.data.userId as string;
@@ -104,8 +107,48 @@ export function registerRoomHandlers(io: TypedIO, socket: TypedSocket) {
       await roomService.canStartGame(roomId, userId);
       await roomService.setRoomStatus(roomId, 'playing');
 
-      // TODO: Phase 2 - Create GameEngine and broadcast game:start
-      logger.info({ userId, roomId }, 'Game starting (engine not yet implemented)');
+      // 获取房间信息
+      const room = await roomService.getRoom(roomId);
+      if (!room) {
+        socket.emit('error', { code: 'ROOM_NOT_FOUND', message: '房间不存在' });
+        return;
+      }
+
+      // 构建玩家信息数组
+      const playerInfos: PlayerInfo[] = [];
+      for (let i = 0; i < 4; i++) {
+        const player = room.players[i];
+        if (player) {
+          playerInfos.push({
+            userId: player.userId,
+            nickname: player.nickname,
+            avatar: player.avatar,
+            seatIndex: player.seatIndex,
+          });
+        }
+      }
+
+      // 创建游戏引擎
+      const engine = createGame(roomId, playerInfos);
+      const state = engine.getState();
+
+      // 获取所有房间内的 socket
+      const sockets = await io.in(roomId).fetchSockets();
+
+      // 给每个玩家发送游戏开始事件
+      for (const s of sockets) {
+        const seat = s.data.seatIndex as number;
+        if (seat !== undefined) {
+          const playerView = engine.getPlayerView(seat);
+          s.emit('game:start', { gameState: playerView });
+        }
+      }
+
+      // 给当前出牌者发送出牌通知并启动计时器
+      const currentSeat = state.currentPlayerSeat;
+      await notifyNextPlayer(io, roomId, currentSeat);
+
+      logger.info({ userId, roomId, players: playerInfos.map((p) => p.userId) }, '游戏开始');
     } catch (err: unknown) {
       const e = err as { code?: string; message?: string };
       socket.emit('error', {

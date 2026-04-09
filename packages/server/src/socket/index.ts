@@ -4,6 +4,7 @@ import type { ClientToServerEvents, ServerToClientEvents } from '@tuosan/shared'
 import { verifyAccessToken } from '../utils/jwt.js';
 import { logger } from '../utils/logger.js';
 import { registerRoomHandlers } from './roomHandler.js';
+import { registerGameHandlers } from './gameHandler.js';
 
 export type TypedIO = Server<ClientToServerEvents, ServerToClientEvents>;
 export type TypedSocket = Parameters<Parameters<TypedIO['on']>[1]>[0];
@@ -33,6 +34,7 @@ export function initSocketIO(httpServer: HttpServer): TypedIO {
     logger.debug({ userId: socket.data.userId }, 'Socket connected');
 
     registerRoomHandlers(io, socket);
+    registerGameHandlers(io, socket);
 
     socket.on('disconnect', () => {
       logger.debug({ userId: socket.data.userId }, 'Socket disconnected');
