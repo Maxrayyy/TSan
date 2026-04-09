@@ -1,4 +1,5 @@
 // packages/client/src/components/PlayerSeat.tsx
+import { RANK_LABELS } from '@tuosan/shared';
 import type { ClientPlayerState } from '@tuosan/shared';
 
 interface PlayerSeatProps {
@@ -6,8 +7,6 @@ interface PlayerSeatProps {
   isCurrentTurn: boolean;
   position: 'bottom' | 'left' | 'top' | 'right';
 }
-
-const RANK_LABELS = ['', '头游', '二游', '三游', '末游'];
 
 export default function PlayerSeat({ player, isCurrentTurn, position }: PlayerSeatProps) {
   // position 参数保留供将来使用，布局由父组件控制

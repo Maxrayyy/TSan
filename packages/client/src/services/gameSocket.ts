@@ -15,11 +15,17 @@ export function bindGameSocketListeners(socket: TypedSocket) {
   socket.on('game:played', (data) => {
     useGameStore
       .getState()
-      .updateAfterPlay(data.seatIndex, data.cards, data.handType, data.remainingCards);
+      .updateAfterPlay(
+        data.seatIndex,
+        data.cards,
+        data.handType,
+        data.remainingCards,
+        data.nextSeat,
+      );
   });
 
   socket.on('game:passed', (data) => {
-    useGameStore.getState().updateAfterPass(data.seatIndex);
+    useGameStore.getState().updateAfterPass(data.seatIndex, data.nextSeat);
   });
 
   socket.on('game:round-end', (data) => {

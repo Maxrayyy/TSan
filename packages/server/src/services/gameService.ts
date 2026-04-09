@@ -2,6 +2,7 @@
 import { GameEngine, type PlayerInfo } from '../game/game-engine.js';
 import { prisma } from '../config/database.js';
 import { getTeamIndex } from '@tuosan/shared';
+import type { GameResult } from '@tuosan/shared';
 import { logger } from '../utils/logger.js';
 
 // 内存中存储活跃的游戏引擎
@@ -31,10 +32,9 @@ export function getAllEngines(): Map<string, GameEngine> {
   return engines;
 }
 
-/** 持久化游戏结果到 PostgreSQL */
-export async function persistGameResult(engine: GameEngine): Promise<void> {
+/** 持久化游戏结果到 PostgreSQL（接受预计算的 result，避免重复调用 settle） */
+export async function persistGameResult(engine: GameEngine, result: GameResult): Promise<void> {
   const state = engine.getState();
-  const result = engine.settle();
 
   try {
     await prisma.$transaction(async (tx) => {

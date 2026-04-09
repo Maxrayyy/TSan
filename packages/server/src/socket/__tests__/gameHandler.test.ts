@@ -46,7 +46,9 @@ describe('游戏流程集成测试', () => {
           break;
         }
         // 出最小的非3牌
-        const sortedNon3 = [...non3Cards].sort((a, b) => a.rank - b.rank || a.suit - b.suit);
+        const sortedNon3 = [...non3Cards].sort(
+          (a, b) => a.rank - b.rank || a.suit.localeCompare(b.suit),
+        );
         engine.play(seat, [sortedNon3[0]]);
       } else {
         // 跟牌：尝试出一张能压制的牌，否则pass
@@ -65,7 +67,7 @@ describe('游戏流程集成测试', () => {
             // 3排在最后（尽量不出3）
             if (a.rank === 3 && b.rank !== 3) return 1;
             if (a.rank !== 3 && b.rank === 3) return -1;
-            return a.rank - b.rank || a.suit - b.suit;
+            return a.rank - b.rank || a.suit.localeCompare(b.suit);
           });
           const result = engine.play(seat, [sorted[0]]);
           if (!result.valid) {

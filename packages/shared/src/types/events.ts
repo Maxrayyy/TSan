@@ -33,8 +33,9 @@ export interface ServerToClientEvents {
     cards: Card[];
     handType: HandType;
     remainingCards: number;
+    nextSeat: number;
   }) => void;
-  'game:passed': (data: { playerId: string; seatIndex: number }) => void;
+  'game:passed': (data: { playerId: string; seatIndex: number; nextSeat: number }) => void;
   'game:round-end': (data: { winnerId: string; winnerSeat: number; score: number }) => void;
   'game:tuo-san': (data: { playerId: string; seatIndex: number; count: number }) => void;
   'game:bie-san': (data: { playerId: string; seatIndex: number; count: number }) => void;

@@ -62,6 +62,8 @@ export const SUIT_COLOR: Record<Suit, 'red' | 'black'> = {
   diamond: 'red',
 };
 
+export const RANK_LABELS = ['', '头游', '二游', '三游', '末游'] as const;
+
 export const HAND_TYPE_DISPLAY: Record<HandTypeEnum, string> = {
   [HandTypeEnum.SINGLE]: '单牌',
   [HandTypeEnum.PAIR]: '对子',

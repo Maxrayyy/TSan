@@ -17,8 +17,9 @@ interface GameStore {
     cards: Card[],
     handType: HandType,
     remainingCards: number,
+    nextSeat: number,
   ) => void;
-  updateAfterPass: (seatIndex: number) => void;
+  updateAfterPass: (seatIndex: number, nextSeat: number) => void;
   updateRoundEnd: (winnerSeat: number) => void;
   updatePlayerFinished: (seatIndex: number, rank: number) => void;
   setGameResult: (result: GameResult) => void;
@@ -43,7 +44,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ gameState, selectedCards: [], gameResult: null });
   },
 
-  updateAfterPlay: (seatIndex, cards, handType, remainingCards) => {
+  updateAfterPlay: (seatIndex, cards, handType, remainingCards, nextSeat) => {
     const { gameState } = get();
     if (!gameState) return;
 
@@ -61,18 +62,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
         myHand: newHand,
         players: newPlayers,
         lastPlay: { playerSeat: seatIndex, cards, handType },
-        isMyTurn: false,
+        currentPlayerSeat: nextSeat,
+        isMyTurn: nextSeat === gameState.mySeat,
       },
       selectedCards: [],
       lastEvent: `player-${seatIndex}-played`,
     });
   },
 
-  updateAfterPass: (seatIndex) => {
+  updateAfterPass: (seatIndex, nextSeat) => {
     const { gameState } = get();
     if (!gameState) return;
     set({
-      gameState: { ...gameState, isMyTurn: false },
+      gameState: {
+        ...gameState,
+        currentPlayerSeat: nextSeat,
+        isMyTurn: nextSeat === gameState.mySeat,
+      },
       lastEvent: `player-${seatIndex}-passed`,
     });
   },

@@ -1,9 +1,7 @@
 // packages/client/src/pages/Result.tsx
 import { useNavigate, useParams } from 'react-router-dom';
 import { useGameStore } from '../stores/useGameStore.js';
-import { getTeamIndex } from '@tuosan/shared';
-
-const RANK_LABELS = ['', '头游', '二游', '三游', '末游'];
+import { getTeamIndex, RANK_LABELS } from '@tuosan/shared';
 
 export default function Result() {
   const { roomId } = useParams<{ roomId: string }>();

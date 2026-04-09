@@ -1,8 +1,10 @@
 import type { TypedIO, TypedSocket } from './index.js';
 import { getEngine, removeEngine, persistGameResult } from '../services/gameService.js';
+import * as roomService from '../services/roomService.js';
 import { logger } from '../utils/logger.js';
 import { TURN_TIMEOUT } from '@tuosan/shared';
 import type { Card } from '@tuosan/shared';
+import type { GameEngine } from '../game/game-engine.js';
 
 // 房间计时器映射
 const turnTimers = new Map<string, NodeJS.Timeout>();
@@ -26,17 +28,14 @@ export function registerGameHandlers(io: TypedIO, socket: TypedSocket): void {
     }
 
     try {
-      // 清除计时器
       clearTurnTimer(roomId);
 
-      // 验证出牌
       const result = engine.play(seatIndex, data.cards);
       if (!result.valid) {
         socket.emit('error', {
           code: 'INVALID_PLAY',
           message: result.reason || '无效出牌',
         });
-        // 重新启动计时器
         startTurnTimer(io, roomId, seatIndex);
         return;
       }
@@ -44,33 +43,17 @@ export function registerGameHandlers(io: TypedIO, socket: TypedSocket): void {
       const state = engine.getState();
       const player = state.players[seatIndex];
 
-      // 广播出牌结果
+      // 广播出牌结果（包含 nextSeat 供客户端更新回合指示）
       io.to(roomId).emit('game:played', {
         playerId: userId,
         seatIndex,
         cards: data.cards,
         handType: result.handType!,
         remainingCards: player.hand.length,
+        nextSeat: state.currentPlayerSeat,
       });
 
-      // 检查玩家是否打完牌
-      if (player.rank !== null) {
-        io.to(roomId).emit('game:player-finished', {
-          playerId: userId,
-          seatIndex,
-          rank: player.rank,
-        });
-
-        // 检查游戏是否结束
-        if (state.phase === 'finished') {
-          await handleGameEnd(io, roomId, engine);
-          return;
-        }
-      }
-
-      // 通知下一个玩家出牌
-      const nextSeat = state.currentPlayerSeat;
-      await notifyNextPlayer(io, roomId, nextSeat);
+      await handlePostPlay(io, roomId, engine, seatIndex);
 
       logger.debug({ userId, roomId, seatIndex, cards: data.cards }, '玩家出牌');
     } catch (err: unknown) {
@@ -99,68 +82,43 @@ export function registerGameHandlers(io: TypedIO, socket: TypedSocket): void {
     }
 
     try {
-      // 清除计时器
       clearTurnTimer(roomId);
 
-      const state = engine.getState();
+      // 显式深拷贝 lastPlay，避免依赖引擎内部实现
+      const prevLastPlay = engine.getState().currentRound.lastPlay
+        ? {
+            ...engine.getState().currentRound.lastPlay!,
+            cards: [...engine.getState().currentRound.lastPlay!.cards],
+          }
+        : null;
+      const prevScores = Object.fromEntries(
+        Object.entries(engine.getState().players).map(([s, p]) => [s, p.score]),
+      );
 
-      // 保存回合状态用于检测回合结束
-      const prevRound = { ...state.currentRound };
-
-      // 验证 pass
       const result = engine.pass(seatIndex);
       if (!result.valid) {
         socket.emit('error', {
           code: 'INVALID_PASS',
           message: result.reason || '无法 pass',
         });
-        // 重新启动计时器
         startTurnTimer(io, roomId, seatIndex);
         return;
       }
 
-      // 广播 pass 事件
+      const newState = engine.getState();
+
+      // 广播 pass 事件（包含 nextSeat）
       io.to(roomId).emit('game:passed', {
         playerId: userId,
         seatIndex,
+        nextSeat: newState.currentPlayerSeat,
       });
 
-      const newState = engine.getState();
+      // 检测回合是否结束
+      await handleRoundEndCheck(io, roomId, newState, prevLastPlay, prevScores);
 
-      // 检测回合是否结束：如果回合从有 lastPlay 变为 null，说明回合刚结束
-      if (newState.currentRound.lastPlay === null && prevRound.lastPlay !== null) {
-        const winnerSeat = prevRound.lastPlay.playerSeat;
-        const winner = newState.players[winnerSeat];
-        const roundScore = winner.score - state.players[winnerSeat].score;
-
-        // 广播回合结束
-        io.to(roomId).emit('game:round-end', {
-          winnerId: winner.userId,
-          winnerSeat,
-          score: roundScore,
-        });
-
-        // 检测拖三
-        const lastPlayCards = prevRound.lastPlay.cards;
-        const isAllThrees = lastPlayCards.every((card) => card.rank === 3);
-        if (isAllThrees && lastPlayCards.length > 0) {
-          const tuoSanCount =
-            newState.players[winnerSeat].tuoSanCount - state.players[winnerSeat].tuoSanCount;
-          if (tuoSanCount > 0) {
-            io.to(roomId).emit('game:tuo-san', {
-              playerId: winner.userId,
-              seatIndex: winnerSeat,
-              count: tuoSanCount,
-            });
-          }
-        }
-
-        logger.debug({ roomId, winnerSeat, roundScore }, '回合结束');
-      }
-
-      // 通知下一个玩家出牌
-      const nextSeat = newState.currentPlayerSeat;
-      await notifyNextPlayer(io, roomId, nextSeat);
+      // 通知下一个玩家
+      await notifyNextPlayer(io, roomId, newState.currentPlayerSeat);
 
       logger.debug({ userId, roomId, seatIndex }, '玩家 pass');
     } catch (err: unknown) {
@@ -172,6 +130,72 @@ export function registerGameHandlers(io: TypedIO, socket: TypedSocket): void {
       });
     }
   });
+}
+
+/** 出牌后的公共处理：检查完成 → 检查游戏结束 → 通知下家 */
+async function handlePostPlay(
+  io: TypedIO,
+  roomId: string,
+  engine: GameEngine,
+  seatIndex: number,
+): Promise<void> {
+  const state = engine.getState();
+  const player = state.players[seatIndex];
+
+  // 检查玩家是否打完牌
+  if (player.rank !== null) {
+    io.to(roomId).emit('game:player-finished', {
+      playerId: player.userId,
+      seatIndex,
+      rank: player.rank,
+    });
+
+    // 检查游戏是否结束
+    if (state.phase === 'finished') {
+      await handleGameEnd(io, roomId, engine);
+      return;
+    }
+  }
+
+  // 通知下一个玩家出牌
+  await notifyNextPlayer(io, roomId, state.currentPlayerSeat);
+}
+
+/** 检测回合结束、拖三 */
+async function handleRoundEndCheck(
+  io: TypedIO,
+  roomId: string,
+  newState: ReturnType<GameEngine['getState']>,
+  prevLastPlay: { playerSeat: number; cards: Card[] } | null,
+  prevScores: Record<string, number>,
+): Promise<void> {
+  if (newState.currentRound.lastPlay === null && prevLastPlay !== null) {
+    const winnerSeat = prevLastPlay.playerSeat;
+    const winner = newState.players[winnerSeat];
+    const roundScore = winner.score - (prevScores[winnerSeat] ?? 0);
+
+    io.to(roomId).emit('game:round-end', {
+      winnerId: winner.userId,
+      winnerSeat,
+      score: roundScore,
+    });
+
+    // 检测拖三
+    const isAllThrees = prevLastPlay.cards.every((card) => card.rank === 3);
+    if (isAllThrees && prevLastPlay.cards.length > 0) {
+      const prevTuoSan = newState.players[winnerSeat].tuoSanCount;
+      // tuoSanCount 已在 engine.pass -> endRound 中更新
+      if (prevTuoSan > 0) {
+        io.to(roomId).emit('game:tuo-san', {
+          playerId: winner.userId,
+          seatIndex: winnerSeat,
+          count: prevTuoSan,
+        });
+      }
+    }
+
+    logger.debug({ roomId, winnerSeat, roundScore }, '回合结束');
+  }
 }
 
 /** 通知下一个玩家出牌，启动计时器 */
@@ -204,125 +228,53 @@ function startTurnTimer(io: TypedIO, roomId: string, seatIndex: number): void {
     logger.debug({ roomId, seatIndex }, '出牌超时，自动处理');
 
     try {
-      // 如果是首出，出最小的非3牌
       if (state.currentRound.lastPlay === null) {
+        // 首出：出最小的非3牌
         const player = state.players[seatIndex];
         const nonThrees = player.hand.filter((card) => card.rank !== 3);
+        const cardToPlay =
+          nonThrees.length > 0 ? [...nonThrees].sort((a, b) => a.rank - b.rank)[0] : player.hand[0]; // 只有3则出第一张
 
-        if (nonThrees.length > 0) {
-          // 找到最小的牌（按 rank 排序）
-          const sorted = [...nonThrees].sort((a, b) => a.rank - b.rank);
-          const minCard = sorted[0];
+        if (!cardToPlay) return;
 
-          // 出最小的单牌
-          const playResult = engine.play(seatIndex, [minCard]);
-          if (playResult.valid) {
-            const newState = engine.getState();
-            const player = newState.players[seatIndex];
+        const playResult = engine.play(seatIndex, [cardToPlay]);
+        if (!playResult.valid) return;
 
-            io.to(roomId).emit('game:played', {
-              playerId: player.userId,
-              seatIndex,
-              cards: [minCard],
-              handType: playResult.handType!,
-              remainingCards: player.hand.length,
-            });
+        const newState = engine.getState();
+        const updatedPlayer = newState.players[seatIndex];
 
-            // 检查玩家是否打完牌
-            if (player.rank !== null) {
-              io.to(roomId).emit('game:player-finished', {
-                playerId: player.userId,
-                seatIndex,
-                rank: player.rank,
-              });
+        io.to(roomId).emit('game:played', {
+          playerId: updatedPlayer.userId,
+          seatIndex,
+          cards: [cardToPlay], // 使用 play 之前保存的牌
+          handType: playResult.handType!,
+          remainingCards: updatedPlayer.hand.length,
+          nextSeat: newState.currentPlayerSeat,
+        });
 
-              if (newState.phase === 'finished') {
-                await handleGameEnd(io, roomId, engine);
-                return;
-              }
-            }
-
-            const nextSeat = newState.currentPlayerSeat;
-            await notifyNextPlayer(io, roomId, nextSeat);
-          }
-        } else {
-          // 只有3，出一张3
-          if (player.hand.length > 0) {
-            const playResult = engine.play(seatIndex, [player.hand[0]]);
-            if (playResult.valid) {
-              const newState = engine.getState();
-              const player = newState.players[seatIndex];
-
-              io.to(roomId).emit('game:played', {
-                playerId: player.userId,
-                seatIndex,
-                cards: [player.hand[0]],
-                handType: playResult.handType!,
-                remainingCards: player.hand.length,
-              });
-
-              if (player.rank !== null) {
-                io.to(roomId).emit('game:player-finished', {
-                  playerId: player.userId,
-                  seatIndex,
-                  rank: player.rank,
-                });
-
-                if (newState.phase === 'finished') {
-                  await handleGameEnd(io, roomId, engine);
-                  return;
-                }
-              }
-
-              const nextSeat = newState.currentPlayerSeat;
-              await notifyNextPlayer(io, roomId, nextSeat);
-            }
-          }
-        }
+        await handlePostPlay(io, roomId, engine, seatIndex);
       } else {
-        // 跟牌时超时，自动 pass
-        const prevRound = { ...state.currentRound };
+        // 跟牌超时：自动 pass
+        const prevLastPlay = state.currentRound.lastPlay
+          ? { ...state.currentRound.lastPlay, cards: [...state.currentRound.lastPlay.cards] }
+          : null;
+        const prevScores = Object.fromEntries(
+          Object.entries(state.players).map(([s, p]) => [s, p.score]),
+        );
+
         const passResult = engine.pass(seatIndex);
+        if (!passResult.valid) return;
 
-        if (passResult.valid) {
-          io.to(roomId).emit('game:passed', {
-            playerId: state.players[seatIndex].userId,
-            seatIndex,
-          });
+        const newState = engine.getState();
 
-          const newState = engine.getState();
+        io.to(roomId).emit('game:passed', {
+          playerId: state.players[seatIndex].userId,
+          seatIndex,
+          nextSeat: newState.currentPlayerSeat,
+        });
 
-          // 检测回合结束
-          if (newState.currentRound.lastPlay === null && prevRound.lastPlay !== null) {
-            const winnerSeat = prevRound.lastPlay.playerSeat;
-            const winner = newState.players[winnerSeat];
-            const roundScore = winner.score - state.players[winnerSeat].score;
-
-            io.to(roomId).emit('game:round-end', {
-              winnerId: winner.userId,
-              winnerSeat,
-              score: roundScore,
-            });
-
-            // 检测拖三
-            const lastPlayCards = prevRound.lastPlay.cards;
-            const isAllThrees = lastPlayCards.every((card) => card.rank === 3);
-            if (isAllThrees && lastPlayCards.length > 0) {
-              const tuoSanCount =
-                newState.players[winnerSeat].tuoSanCount - state.players[winnerSeat].tuoSanCount;
-              if (tuoSanCount > 0) {
-                io.to(roomId).emit('game:tuo-san', {
-                  playerId: winner.userId,
-                  seatIndex: winnerSeat,
-                  count: tuoSanCount,
-                });
-              }
-            }
-          }
-
-          const nextSeat = newState.currentPlayerSeat;
-          await notifyNextPlayer(io, roomId, nextSeat);
-        }
+        await handleRoundEndCheck(io, roomId, newState, prevLastPlay, prevScores);
+        await notifyNextPlayer(io, roomId, newState.currentPlayerSeat);
       }
     } catch (err) {
       logger.error({ err, roomId, seatIndex }, '超时自动处理失败');
@@ -342,23 +294,24 @@ function clearTurnTimer(roomId: string): void {
 }
 
 /** 处理游戏结束 */
-async function handleGameEnd(
-  io: TypedIO,
-  roomId: string,
-  engine: ReturnType<typeof getEngine>,
-): Promise<void> {
-  if (!engine) return;
-
+async function handleGameEnd(io: TypedIO, roomId: string, engine: GameEngine): Promise<void> {
   clearTurnTimer(roomId);
 
-  // 结算游戏
+  // 结算游戏（只调用一次）
   const result = engine.settle();
 
   // 广播游戏结束
   io.to(roomId).emit('game:end', { result });
 
-  // 持久化结果
-  await persistGameResult(engine);
+  // 持久化结果（传入已结算的 result，避免重复调用 settle）
+  await persistGameResult(engine, result);
+
+  // 恢复房间状态为 waiting
+  try {
+    await roomService.setRoomStatus(roomId, 'waiting');
+  } catch (err) {
+    logger.error({ err, roomId }, '恢复房间状态失败');
+  }
 
   // 清理引擎
   removeEngine(roomId);
