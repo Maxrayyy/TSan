@@ -34,4 +34,5 @@ export {
   MAX_PLAYERS,
   TEAM_SEATS,
   getTeamIndex,
+  QUICK_PHRASES,
 } from './constants/game.js';

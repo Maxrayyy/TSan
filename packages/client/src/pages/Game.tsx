@@ -4,6 +4,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { TURN_TIMEOUT } from '@tuosan/shared';
 import type { Card } from '@tuosan/shared';
 import { useGameStore } from '../stores/useGameStore.js';
+import { useRoomStore } from '../stores/useRoomStore.js';
+import { useAuthStore } from '../stores/useAuthStore.js';
 import { getSocket } from '../services/socket.js';
 import CardHand from '../components/CardHand.js';
 import PlayerSeat from '../components/PlayerSeat.js';
@@ -11,6 +13,8 @@ import CardPile from '../components/CardPile.js';
 import ScoreBoard from '../components/ScoreBoard.js';
 import Timer from '../components/Timer.js';
 import ActionBar from '../components/ActionBar.js';
+import QuickPhraseBar from '../components/QuickPhraseBar.js';
+import ChatBubble from '../components/ChatBubble.js';
 import { getHints } from '../game/hints.js';
 import { useSound } from '../hooks/useSound.js';
 
@@ -22,8 +26,13 @@ export default function Game() {
 
   const [hintIndex, setHintIndex] = useState(0);
   const [hints, setHints] = useState<Card[][]>([]);
+  const [showPhrases, setShowPhrases] = useState(false);
   const { playCard, playPass, playBomb, playTick, playButton } = useSound();
   const lastEventRef = useGameStore((s) => s.lastEvent);
+  const { chatMessages, sendChat } = useRoomStore();
+  const userId = useAuthStore((s) => s.user?.id);
+  // 只显示最近3条聊天消息
+  const recentChats = chatMessages.slice(-3);
 
   // 断线自动重连
   useEffect(() => {
@@ -144,6 +153,11 @@ export default function Game() {
   const canPass = isMyTurn && lastPlay !== null;
   const lastPlayPlayerName = lastPlay ? players[lastPlay.playerSeat]?.nickname : undefined;
 
+  const handleQuickChat = (message: string) => {
+    sendChat(message);
+    setShowPhrases(false);
+  };
+
   return (
     <div className="flex h-screen flex-col bg-green-900">
       {/* 顶部栏：分数 + 计时器 */}
@@ -188,6 +202,33 @@ export default function Game() {
           handType={lastPlay?.handType ?? null}
           playerName={lastPlayPlayerName}
         />
+
+        {/* 聊天气泡 */}
+        <div className="absolute bottom-2 left-2 flex flex-col gap-1 pointer-events-none">
+          {recentChats.map((msg, i) => (
+            <ChatBubble
+              key={`${msg.timestamp}-${i}`}
+              nickname={msg.nickname}
+              message={msg.message}
+              isMine={msg.playerId === userId}
+            />
+          ))}
+        </div>
+
+        {/* 快捷短语切换按钮 */}
+        <button
+          onClick={() => setShowPhrases((v) => !v)}
+          className="absolute bottom-2 right-2 rounded-full bg-green-700 px-2 py-1 text-xs sm:px-3 sm:text-sm text-green-200 hover:bg-green-600 active:bg-green-500"
+        >
+          💬
+        </button>
+
+        {/* 快捷短语面板 */}
+        {showPhrases && (
+          <div className="absolute bottom-10 right-2 z-10 rounded-lg bg-green-800 p-2 shadow-lg border border-green-600">
+            <QuickPhraseBar onSend={handleQuickChat} />
+          </div>
+        )}
       </div>
 
       {/* 底部：我的手牌 + 操作按钮 */}

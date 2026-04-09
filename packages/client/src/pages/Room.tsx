@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useRoomStore } from '../stores/useRoomStore.js';
 import { useAuthStore } from '../stores/useAuthStore.js';
 import { useGameStore } from '../stores/useGameStore.js';
+import QuickPhraseBar from '../components/QuickPhraseBar.js';
 
 export default function Room() {
   const { roomId } = useParams<{ roomId: string }>();
@@ -187,6 +188,9 @@ export default function Room() {
               </p>
             ))
           )}
+        </div>
+        <div className="mb-2">
+          <QuickPhraseBar onSend={sendChat} />
         </div>
         <div className="flex gap-1.5 sm:gap-2">
           <input

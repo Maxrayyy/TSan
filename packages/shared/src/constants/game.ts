@@ -37,6 +37,18 @@ export const RECONNECT_TIMEOUT = 60;
 // 房间最大人数
 export const MAX_PLAYERS = 4;
 
+// 快捷短语
+export const QUICK_PHRASES = [
+  '快点吧！',
+  '谢谢队友！',
+  '不好意思',
+  '打得好！',
+  '我拖三了！',
+  '别急，想想',
+  '大的来！',
+  '稳住！',
+];
+
 // 队伍分配：座位 0,2 为队伍A，座位 1,3 为队伍B
 export const TEAM_SEATS: [number[], number[]] = [
   [0, 2],
